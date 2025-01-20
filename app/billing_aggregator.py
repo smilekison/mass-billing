@@ -14,14 +14,12 @@ def aggregate_bills(journeys, zone_map):
         dict: A dictionary where keys are user_ids and values are dictionaries containing
               total_amount, daily_amount, monthly_amount, and daily_breakdown.
     """
-    # Dictionary to store billing information for each user
     user_bills = {}
-
-    # Iterate through each journey record
     for journey in journeys:
         user_id = journey['user_id']
+        journey_date = journey['time'].date()
+        journey_month = journey_date.replace(day=1)  # Track the month (year and month only)
 
-        # Initialize the user's billing record if it doesn't exist
         if user_id not in user_bills:
             user_bills[user_id] = {
                 'total_amount': 0.0,  # Total billing amount for the user
@@ -29,13 +27,17 @@ def aggregate_bills(journeys, zone_map):
                 'monthly_amount': 0.0,  # Monthly billing amount for the user
                 'current_entry': None,  # Tracks the current IN journey for the user
                 'last_journey_date': None,  # Tracks the date of the last journey
+                'last_journey_month': None,  # Tracks the month of the last journey
                 'daily_breakdown': {}  # Tracks daily billing amounts
             }
 
-        # Get the user's billing record
         user_bill = user_bills[user_id]
 
-        # Handle IN direction journeys
+        # Reset monthly_amount if the month has changed
+        if user_bill['last_journey_month'] and journey_month != user_bill['last_journey_month']:
+            user_bill['monthly_amount'] = 0.0  # Reset monthly amount for the new month
+
+        # Handle IN and OUT directions
         if journey['direction'] == 'IN':
             # If there's already an IN without an OUT, charge £5.00 for the erroneous journey
             if user_bill['current_entry']:
@@ -44,7 +46,6 @@ def aggregate_bills(journeys, zone_map):
                 user_bill['monthly_amount'] += 5.00
 
                 # Update daily breakdown
-                journey_date = journey['time'].date()
                 if journey_date not in user_bill['daily_breakdown']:
                     user_bill['daily_breakdown'][journey_date] = 0.0
                 user_bill['daily_breakdown'][journey_date] += 5.00
@@ -52,7 +53,6 @@ def aggregate_bills(journeys, zone_map):
             # Set the current IN journey
             user_bill['current_entry'] = journey
 
-        # Handle OUT direction journeys
         elif journey['direction'] == 'OUT':
             if user_bill['current_entry']:
                 # Calculate the cost of the journey
@@ -61,7 +61,6 @@ def aggregate_bills(journeys, zone_map):
                 cost = calculate_journey_cost(zone_map, entry_station, exit_station)
 
                 # Check if the date has changed (new day)
-                journey_date = journey['time'].date()
                 if user_bill['last_journey_date'] and journey_date != user_bill['last_journey_date']:
                     user_bill['daily_amount'] = 0.0  # Reset daily amount for the new day
 
@@ -81,8 +80,9 @@ def aggregate_bills(journeys, zone_map):
                     user_bill['daily_breakdown'][journey_date] = 0.0
                 user_bill['daily_breakdown'][journey_date] += cost
 
-                # Update the last journey date
+                # Update the last journey date and month
                 user_bill['last_journey_date'] = journey_date
+                user_bill['last_journey_month'] = journey_month
 
                 # Clear the current IN journey
                 user_bill['current_entry'] = None
@@ -93,7 +93,6 @@ def aggregate_bills(journeys, zone_map):
                 user_bill['monthly_amount'] += 5.00
 
                 # Update daily breakdown
-                journey_date = journey['time'].date()
                 if journey_date not in user_bill['daily_breakdown']:
                     user_bill['daily_breakdown'][journey_date] = 0.0
                 user_bill['daily_breakdown'][journey_date] += 5.00
